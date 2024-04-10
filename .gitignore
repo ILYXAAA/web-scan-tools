@@ -4,8 +4,6 @@ __pycache__/
 *$py.class
 
 # My analyzed files
-Avaible/
-Avaible_paths/
 Results/
 *.log
 merged_code.txt

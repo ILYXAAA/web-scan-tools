@@ -2,6 +2,7 @@ flag
 cvs
 download
 privacy
+company/faq
 dashboard
 level
 back-up
