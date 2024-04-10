@@ -3,6 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# My analyzed files
+Avaible/
+Avaible_paths/
+Results/
+*.log
+merged_code.txt
+test.py
+test2.py
+
 # C extensions
 *.so
 
