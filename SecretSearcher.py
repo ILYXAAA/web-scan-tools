@@ -2,6 +2,8 @@ import re
 import os
 import colorama
 from colorama import Style, Fore
+import chardet
+import argparse
 
 class SecretSearcher:
     def __init__(self, file_path=None, show_comments=False) -> None:
@@ -19,7 +21,7 @@ class SecretSearcher:
             '[google_captcha]' : r'6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$',
             '[google_oauth]'   : r'ya29\.[0-9A-Za-z\-_]+',
             '[amazon_aws_access_key_id]' : r'A[SK]IA[0-9A-Z]{16}',
-            '[amazon_mws_auth_toke]' : r'amzn\\.mws\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+            '[amazon_mws_auth_token]' : r'amzn\\.mws\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
             '[amazon_aws_url]' : r's3\.amazonaws.com[/]+|[a-zA-Z0-9_-]*\.s3\.amazonaws.com',
             '[amazon_aws_url2]' : r"(" \
                 r"[a-zA-Z0-9-\.\_]+\.s3\.amazonaws\.com" \
@@ -63,7 +65,7 @@ class SecretSearcher:
             '[Номер телефона]': r'\b(?:\+7|8)[ -]?\(?(?:\d{3})\)?[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}\b,',
             '[Номер карты (luna)]': r'\b(?:\d[ -]*?){13,16}\b',
             '[Ссылки]': r'\b(?<!@)(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9:%._\+~#=]{2,256}\.(?:com|ru|org|рф|gov|edu|mil|int|biz|aero|coop|museum|arpa|travel|asia|cat|jobs|mobi|tel|xxx)(?:\/[-a-zA-Z0-9@:%_\+.~#?&//=]*)?\b(?!@)',
-            '[Имена файлов]': r'\b\w+\.(?:txt|js|doc|docx|pdf|xls|xlsx|ppt|pptx|csv|json|xml|html|htm|rtf|odt|ott|ods|odp|ott|jpg|jpeg|png|gif|bmp|tif|tiff|ico|svg|mp3|wav|aac|ogg|flac|wma|mp4|avi|wmv|mkv|mov|flv|mpeg|zip|rar|7z|tar|gz|bz2)\b',
+            '[Имена файлов]': r'\b\w+\.(?:txt|js|doc|docx|pdf|xls|xlsx|ppt|pptx|csv|json|xml|html|htm|rtf|odt|ott|ods|odp|ott|tif|tiff|mp3|wav|aac|ogg|flac|wma|mp4|avi|wmv|mkv|mov|flv|mpeg|zip|rar|7z|tar|gz|bz2)\b',
             '[Даты]': r'\b(?:\d{2}[.-]\d{2}[.-]\d{4}|\d{4}[.-]\d{2}[.-]\d{2}|\d{2}:\d{2}:\d{4})\b',
             '[Email адреса]': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
             '[Хеш-суммы (MD5, SHA-1, SHA-256)]': r'\b(?:[a-fA-F\d]{32}|[a-fA-F\d]{40}|[a-fA-F\d]{64})\b',
@@ -87,16 +89,44 @@ class SecretSearcher:
             '[AES ключ]': r'\b(?:AES|aes_key)\s*[:=]\s*[\'"]?([A-Za-z0-9+/=]+)[\'"]?,',
         }
 
+    @staticmethod
+    def convert_to_utf8(input_file):
+        output_file = f"{input_file}.txt"
+        # Определение кодировки входного файла
+        with open(input_file, 'rb') as f:
+            rawdata = f.read()
+            encoding = chardet.detect(rawdata)['encoding']
+
+        if encoding is None:
+            encoding = 'utf-8'  # По умолчанию, если не удалось определить
+
+        # Переконвертация в utf-8
+        with open(input_file, 'r', encoding=encoding, errors='ignore') as f:
+            content = f.read()
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        print(f'[LOG] <<Success>> - Файл переконвертирован в UTF-8')
+        return output_file
+    
     def search_sensitive_info(self):
         found_info = {}
+        try:
+            with open(self.file_path, "r", encoding="utf-8") as file:
+                data = file.read()
 
-        with open(self.file_path, 'r') as file:
-            data = file.read()
+        except UnicodeDecodeError as error:
+            print(f'[LOG] <<UnicodeDecodeError>> - {error}')
+            print(f'[LOG] <<Fix>> - Попытка конвертации в UTF-8')
+            self.file_path = self.convert_to_utf8(self.file_path)
+            
+            with open(self.file_path, "r", encoding="utf-8") as file:
+                data = file.read()
 
-            for category, pattern in self.patterns.items():
-                matches = re.findall(pattern, data)
-                if matches:
-                    found_info[category] = matches
+        for category, pattern in self.patterns.items():
+            matches = re.findall(pattern, data)
+            if matches:
+                found_info[category] = matches
 
         return found_info
 
@@ -104,7 +134,7 @@ class SecretSearcher:
         russian_letters = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
         russian_letters += russian_letters.upper()  # Добавляем верхний регистр
 
-        with open(self.file_path, 'r') as file:
+        with open(self.file_path, 'r', encoding="utf-8") as file:
             for line in file:
                 # Паттерн для комментариев
                 comment_pattern = r'(\/\*[\s\S]{1,50}?\*\/|\/\/.{1,50}|<!--[\s\S]{1,50}?-->)'
@@ -130,8 +160,6 @@ class SecretSearcher:
             if sensitive_info:
                 print("Найденная sensitive информация:")
                 for category, matches in sensitive_info.items():
-                    # Генерация случайного цвета для каждой категории
-                    #colors = [colorama.Fore.RED, colorama.Fore.GREEN, colorama.Fore.YELLOW, colorama.Fore.BLUE, colorama.Fore.MAGENTA, colorama.Fore.CYAN]
                     # Вывод информации с цветом
                     print(f"\n{colorama.Fore.YELLOW}{category}{colorama.Style.RESET_ALL}: {', '.join(matches)}")
             else:
@@ -143,9 +171,17 @@ class SecretSearcher:
             print("Указанный файл не найден.")
 
 if __name__ == "__main__":
-    file_path = input(f"Enter path to file:\n>").replace('"', "")
+    parser = argparse.ArgumentParser(description='Автоматизированный поиск чувствительной информации')
+    parser.add_argument('-f', '--file_path', type=str, default=None, help='Путь к файлу для поиска информации')
+    parser.add_argument('-s', '--show_comments', type=str, default=False, help='Вывод комментариев в коде, которые содержат фразы на русском языке')
+    args = parser.parse_args()
+    file_path = args.file_path.replace('"', "")
+    show_comments = args.show_comments
+    if "true" in show_comments.lower() or "yes" in show_comments.lower():
+        show_comments = True
+
     if not os.path.exists(file_path):
         while not os.path.exists(file_path):
             file_path = input(f"This file does not exists. Try again:\n>").replace('"', "")
-    Searcher = SecretSearcher(file_path=file_path, show_comments=True)
+    Searcher = SecretSearcher(file_path=file_path, show_comments=show_comments)
     Searcher.search_information()

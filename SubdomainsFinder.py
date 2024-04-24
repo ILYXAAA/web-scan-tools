@@ -6,6 +6,8 @@ from tqdm import tqdm
 from fake_useragent import UserAgent
 import urllib3
 from datetime import datetime
+import json
+import argparse
 
 class SubdomainsFinder:
     def __init__(self, site:str = None, securitytrails_api_key:str = None, output_folder:str = "Results/SubdomainsFinder_RawResults") -> None:
@@ -50,11 +52,11 @@ class SubdomainsFinder:
                 return (False, response.status_code, "Server error", url)
         
         except requests.exceptions.ConnectionError:
-            return (False, None, "requests.exceptions.ConnectionError", url)
+            return (False, None, "requests.exceptions.Connectionrrror", url)
         except urllib3.exceptions.MaxRetryError:
             return (False, None, "urllib3.exceptions.MaxRetryError", url)
         except requests.exceptions.ReadTimeout:
-            return (False, None, "requests.exceptions.ReadTimeout", url)
+            return (False, None, "requests.exceptions.readTimeout", url)
         except Exception:
             return (False, None, "Some another Error", url)
         return (False, response.status_code, "Status not assigned", url)
@@ -68,6 +70,7 @@ class SubdomainsFinder:
         url = f"https://api.securitytrails.com/v1/domain/{domain}/subdomains?children_only=false&include_inactive=true"
 
         headers = {
+            "accept": "application/json",
             "APIKEY": self.SEC_TRAILS_API_KEY
         }
 
@@ -146,7 +149,21 @@ class SubdomainsFinder:
             print(f"[LOG] <<SAVING>> {len(available_sites)} of subdomains are avaible.\n[LOG] Results saved in: '{output_file}'\n")
 
 if __name__ == "__main__":
-    domain = input(f"Enter domain for scan:\n>").replace("https://", "").replace("http://", "")
-    api_token = input(f"Enter API for SecurityTrails:\n>")
-    Finder = SubdomainsFinder(site=domain, securitytrails_api_key=api_token)
+    parser = argparse.ArgumentParser(description='Поиск под-доменов сайта')
+    parser.add_argument('-u', '--url', type=str, default=None, help='Ссылка на сайт')
+    parser.add_argument('-t', '--token', type=str, default=None, help='API Токен сайта SecurityTrails')
+    args = parser.parse_args()
+    domain = args.url
+    token = args.url
+    if not domain:
+        input(f"Enter domain for scan:\n>").replace("https://", "").replace("http://", "")
+    if not token:     
+        try:
+            with open(f"config.json", "r") as file:
+                CONFIG = json.loads(file.read())
+            token = CONFIG["SecurityTrails_API_TOKEN"]
+        except Exception as error:
+            token = input("Enter your SecurityTrails API Token: ")
+
+    Finder = SubdomainsFinder(site=domain, securitytrails_api_key=token)
     Finder.start_aviability_scanner()

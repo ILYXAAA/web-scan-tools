@@ -1,5 +1,6 @@
 import os
 from tqdm import tqdm
+import argparse
 
 class JadxToText:
     def __init__(self, source_folder=None, output_file="merged_code.txt") -> None:
@@ -39,14 +40,17 @@ class JadxToText:
         print(f"[LOG] Done! All code saved in {self.output_file}\n")
 
 if __name__ == "__main__":
-    source_path = input(f"Enter `source` path:\n>").replace('"', "")
-    if not os.path.exists(source_path):
-        while not os.path.exists(source_path):
-            source_path = input(f"This path does not exists. Try again:\n>").replace('"', "")
-    output_file = input(f"Enter `output` file:\n>").replace('"', "")
-    if not os.path.exists(output_file):
-        while not output_file.endswith(".txt"):
-            output_file = input(f"This should be txt file. Try again:\n>").replace('"', "")
+    parser = argparse.ArgumentParser(description='Склеивание всех классов в source в один txt файл')
+    parser.add_argument('-s', '--source_path', type=str, default=None, help='Путь к папке source')
+    parser.add_argument('-o', '--output_file', type=str, default=None, help='Путь к выходному txt файлу с результатом')
+    args = parser.parse_args()
+    source_path = args.source_path.replace('"', "")
+    output_file = args.output_file.replace('"', "")
+
+    while not os.path.exists(source_path):
+        source_path = input(f"Source path does not exists. Try to enter it again:\n>").replace('"', "")
+    while not output_file.endswith(".txt"):
+        output_file = input(f"Output file should be txt. Try to enter it again:\n>").replace('"', "")
     
     Jadx = JadxToText(source_folder=source_path, output_file=output_file)
     Jadx.merge_source_to_txt()
