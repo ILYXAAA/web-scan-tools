@@ -12,9 +12,10 @@ import pickle
 import argparse
 import threading
 from Colors import Colors
+import concurrent.futures
 
 class DirPathFinder:
-    def __init__(self, proxy_list_file="Dictionary/proxy_list.txt", your_site=None, paths_dictionary="Dictionary/dict_4600_dirs.txt", exclude_flag_phrase=None, seconds_parameter=30, max_errors_number=30, seconds_to_sleep=30, max_threads_number=10) -> None:
+    def __init__(self, proxy_list_file="Dictionary/proxy_list.txt", your_site=None, paths_dictionary="Dictionary/dict_4600_dirs.txt", exclude_flag_phrase=None, seconds_parameter=30, max_errors_number=30, seconds_to_sleep=30, max_threads_number=10, use_proxy=False) -> None:
         # Создание директорий программы (если их нет)
         if not os.path.exists("Results"):
             os.mkdir("Results")
@@ -65,29 +66,31 @@ class DirPathFinder:
         # Proxy func in progress..
         self.proxy_list_file = proxy_list_file
         self.proxies = None
-        self.use_proxy=False
-        # if self.use_proxy:
-        #     if self.is_file_created_more_than_day_ago(self.proxy_list_file):
-        #         print(f"[LOG] Your '{self.proxy_list_file}' needs update..")
-        #         with open("last_launch.log", "a") as file:
-        #             file.write(f"[LOG] - Your '{self.proxy_list_file}' needs update..")
-        #         try:
-        #             response = requests.get("https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt")
-        #             with open(f"Dictionary/proxy_list.txt", "w") as file:
-        #                 file.write(response.content.decode())
-        #             print(f"[LOG] Your {self.proxy_list_file} sucessfully updated")
-        #         except Exception as error:
-        #             print(f"[LOG] Error with updating '{self.proxy_list_file}'")
-        #             with open("last_launch.log", "a") as file:
-        #                 file.write(f"[LOG] - Error with updating '{self.proxy_list_file}'")
-        #             print(error)
+        self.use_proxy=use_proxy
+        self.valid_proxy = None
 
-        #     if os.path.exists("Dictionary/proxy_list.txt"):
-        #         with open("Dictionary/proxy_list.txt", "r") as file:
-        #             self.proxies = file.readlines()
-        #         self.proxies = [proxy.strip() for proxy in self.proxies]
-        #     else:
-        #         self.proxies = None
+        if self.use_proxy:
+            if self.is_file_created_more_than_3h_ago(self.proxy_list_file):
+                print(f"{Colors.YELLOW}[LOG] <<UPDATE>>{Colors.END} - Your '{self.proxy_list_file}' needs update..")
+                with open("last_launch.log", "a") as file:
+                    file.write(f"[LOG] - Your '{self.proxy_list_file}' needs update..")
+                try:
+                    response = requests.get("https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt")
+                    with open(f"Dictionary/proxy_list.txt", "w") as file:
+                        file.write(response.content.decode())
+                    print(f"{Colors.GREEN}[LOG] <<SUCCESS>>{Colors.END} - Your {self.proxy_list_file} sucessfully updated")
+                except Exception as error:
+                    print(f"{Colors.RED}[LOG] <<Error>>{Colors.END} - Error with updating '{self.proxy_list_file}'")
+                    with open("last_launch.log", "a") as file:
+                        file.write(f"[LOG] - Error with updating '{self.proxy_list_file}'")
+                    print(error)
+
+            if os.path.exists("Dictionary/proxy_list.txt"):
+                with open("Dictionary/proxy_list.txt", "r") as file:
+                    self.proxies = file.readlines()
+                self.proxies = [proxy.strip() for proxy in self.proxies]
+            else:
+                self.proxies = None
         # Proxy func in progress..
 
         # Проверка есть ли сохраненный прошлый прогресс
@@ -107,7 +110,42 @@ class DirPathFinder:
                 pass
         if progress_file:
             self.current_iteration, self.available_sites, self.total_errors_count, self.total_found = self.load_progress(progress_file=progress_file)            
+
+    def check_proxy(self, proxy):
+        try:
+            response = requests.get("https://www.google.com", proxies={"http": proxy, "https": proxy}, timeout=5)
+            if response.status_code == 200:
+                return proxy  # Если прокси валиден, возвращаем его
+            else:
+                return None
+        except Exception as e:
+            return None
         
+    def find_valid_proxy(self, filename, batch_size=10):
+        try:
+            with open(f"Dictionary/{filename}", 'r') as file:
+                proxies = file.readlines()
+
+            total_proxies = len(proxies)
+            current_iter = 0
+            num_batches = (total_proxies + batch_size - 1) // batch_size
+
+            for i in range(num_batches):
+                batch = proxies[i * batch_size: (i + 1) * batch_size]
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    results = executor.map(self.check_proxy, batch)
+                    for result in results:
+                        current_iter += 1
+                        if result is not None:
+                            self.valid_proxy = result  # Сохраняем найденный валидный прокси
+                            executor.shutdown(wait=True)  # Останавливаем все потоки
+                            return  # Завершаем поиск после первого найденного валидного прокси
+                tqdm.write(f"{Colors.BLUE}[LOG] <<INFO>>{Colors.END} - Searching valid proxy... {current_iter}/{total_proxies}")
+            self.valid_proxy = None
+        except Exception as error:
+            self.valid_proxy = None  
+            print(f"\n{Colors.RED}[LOG] <<ERROR>>{Colors.END} - Some error in `find_valid_proxy`: {error}")
+
     def check_errors(self):
         try:
             # Удаляем времена ошибок, которые были более 10 секунд назад
@@ -118,14 +156,14 @@ class DirPathFinder:
             if len(self.errors_dict) >= self.max_errors_number:
                 # Вычисляем разницу в секундах между первой и последней ошибками
                 time_difference = int(max(self.errors_dict.values()) - min(self.errors_dict.values()))
-                print(f"\n{Colors.YELLOW}[LOG] <<SLEEP>>{Colors.END} - Too many errors, sleeping... ({self.max_errors_number} errors in {time_difference} seconds)\n")
+                returnstring = f"{Colors.RED}[LOG] <<ERRORS>>{Colors.END} - Too many errors... ({self.max_errors_number} errors in {time_difference} seconds)"
                 self.errors_dict.clear()  # Обнуляем словарь ошибок
-                return False
+                return False, returnstring
             else:
-                return True
+                return True, None
         except Exception as error:
-            print(f"\n{Colors.RED}[LOG] <<ERROR>>{Colors.END} - Some error in `check_errors`: {error}")
-            return True
+            returnstring = f"{Colors.RED}[LOG] <<ERROR>>{Colors.END} - Some error in `check_errors`: {error}"   
+            return True, returnstring
         
     def save_progress(self, progress_file, iteration, avaible_sites, total_errors_count, total_found):
         try:
@@ -158,14 +196,14 @@ class DirPathFinder:
             print(f"{Colors.RED}[LOG] <<ERROR>>{Colors.END} Error while load progress: {error}\n")
             return None,None,None,None
     
-    def is_file_created_more_than_day_ago(self, file_path):
+    def is_file_created_more_than_3h_ago(self, file_path):
         try:
             if not os.path.exists(file_path):
                 return True
             created_time = os.path.getctime(file_path)
             current_time = time.time()
             time_difference = current_time - created_time
-            if time_difference > 86400:
+            if time_difference > 36000:
                 return True
             else:
                 return False
@@ -173,11 +211,15 @@ class DirPathFinder:
             print(f"\n{Colors.RED}[LOG] <<Error>>{Colors.END} - Error occured: {error}...")
     
     @staticmethod
-    def check_website(url):
+    def check_website(url, valid_proxy):
+        if valid_proxy:
+            proxies = {"http": valid_proxy, "https": valid_proxy}
+        else:
+            proxies = None
         try:
             ua = UserAgent()
             headers = {'User-Agent': ua.random}
-            response = requests.get(url=url, headers=headers, timeout=5, stream=True)
+            response = requests.get(url=url, headers=headers, timeout=5, stream=True, proxies=proxies)
 
             if str(response.status_code)[0] == "2":
                 return (True, response.status_code, "Success", url, response.content.decode('utf-8'))
@@ -269,11 +311,23 @@ class DirPathFinder:
                         time.sleep(0.03)
                     self.pbar.update(1)
 
-                    if not self.check_errors():
-                        print("")
-                        for i in range(self.seconds_to_sleep): 
-                            print(f"\r{Colors.BLUE}[LOG] <<SLEEPING>>{Colors.END} - {self.seconds_to_sleep-i} seconds remaining...", end="\r")
-                            time.sleep(1)
+                    check_errors_result, tqdm_desc = self.check_errors()
+                    if tqdm_desc:
+                        self.pbar.set_description(tqdm_desc)
+                    if not check_errors_result:
+                        if self.use_proxy:
+                            tqdm.write(f"{Colors.BLUE}[LOG] <<INFO>>{Colors.END} - Valid proxy searcher starts")
+                            self.find_valid_proxy("proxy_list.txt")
+                            if self.valid_proxy:
+                                tqdm.write(f"{Colors.GREEN}[LOG] <<SUCCESS>>{Colors.END} - Founded valid proxy: {self.valid_proxy}")
+                            else:
+                                tqdm.write(f"{Colors.RED}[LOG] <<ERROR>>{Colors.END} - No valid proxy founded. Setting `use_proxy` to False")
+                                self.use_proxy = False
+                        else:
+                            tqdm.write(f"{Colors.BLUE}[LOG] <<SLEEPING>>{Colors.END} - {self.seconds_to_sleep} seconds remaining...")
+                            for i in range(self.seconds_to_sleep):
+                                self.pbar.set_description = f"[LOG] <<SLEEPING>> - {self.seconds_to_sleep-i} seconds remaining..."
+                                time.sleep(1)
 
             self.write_results_to_file(self.available_sites, self.output_file)
         
@@ -287,10 +341,11 @@ class DirPathFinder:
             progress_output_file = f"Progress/{self.your_site}_{self.paths_dictionary.replace('Dictionary/', '').replace('.txt', '')}.pickle"
             self.save_progress(progress_output_file, self.current_iteration, self.available_sites, self.total_errors_count, self.total_found)
             self.keep_highest_percentage_files()
-        except Exception as error:
-            print(f"\n{Colors.RED}[LOG] <<Thread Error>>{Colors.END} - Error occured: {error}...")
-            with open("last_launch.log", "a") as file:
-                file.write(f"\n[LOG] <<Thread Error>> - Error occured: {error}...")
+        # except Exception as error:
+        #     print(f"\n{Colors.RED}[LOG] <<Thread Error>>{Colors.END} - Error occured: {error}...")
+        #     print(error)
+        #     with open("last_launch.log", "a") as file:
+        #         file.write(f"\n[LOG] <<Thread Error>> - Error occured: {error}...")
 
     def launch_threadings(self, paths_prefixs, threads_number):
         results = []
@@ -305,7 +360,7 @@ class DirPathFinder:
     
     def process_url(self, url, results):
         try:
-            result = self.check_website(url)
+            result = self.check_website(url, self.valid_proxy)
             results.append(result)
         except Exception as error:
             print(f"{Colors.RED}[LOG] <<THREAD ERROR>>{Colors.END} - Error occured: {error}")
@@ -399,6 +454,7 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--sleep_errors', type=int, default=30, help='Количество ошибок в 30сек для срабатывания сна')
     parser.add_argument('-t', '--threads_number', type=int, default=10, help='Максимальное количество потоков программы')
     parser.add_argument('-ep', '--exclude_phrase', type=str, default=None, help='Фраза для отнесения 200-запросов к недостпным')
+    parser.add_argument('-up', '--use_proxy', type=str, default=False, help='Использовать прокси-список')
     args = parser.parse_args()
 
     paths_dictionary = args.dictionary_path
@@ -407,6 +463,9 @@ if __name__ == "__main__":
     max_errors_number = args.sleep_errors
     max_threads_number = args.threads_number
     exclude_phrase = args.exclude_phrase
+    use_proxy = args.use_proxy
+    if "true" in use_proxy.lower() or "yes" in use_proxy.lower():
+        use_proxy = True
     if not domain:
         while not domain:
             domain = input(f"Enter domain for scan:\n>").replace("https://", "").replace("http://", "")
@@ -417,5 +476,5 @@ if __name__ == "__main__":
         print(f"[LOG] <<SET VAR>> Set dictionary to `Dictionary/dict_13k_dirs.txt`")
         paths_dictionary = "Dictionary/dict_13k_dirs.txt"
 
-    Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase)
+    Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase, use_proxy=use_proxy)
     Finder.start_dir_scanner()

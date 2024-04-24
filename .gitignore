@@ -10,8 +10,6 @@ Progress/
 merged_code.txt
 test.py
 test2.py
-README.md
-Guide.md
 
 # C extensions
 *.so
