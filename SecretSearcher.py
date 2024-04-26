@@ -173,13 +173,15 @@ class SecretSearcher:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Автоматизированный поиск чувствительной информации')
     parser.add_argument('-f', '--file_path', type=str, default=None, help='Путь к файлу для поиска информации')
-    parser.add_argument('-s', '--show_comments', type=str, default=False, help='Вывод комментариев в коде, которые содержат фразы на русском языке')
+    parser.add_argument('-s', '--show_comments', type=str, default="False", help='Вывод комментариев в коде, которые содержат фразы на русском языке')
     args = parser.parse_args()
     file_path = args.file_path.replace('"', "")
     show_comments = args.show_comments
     if "true" in show_comments.lower() or "yes" in show_comments.lower():
         show_comments = True
-
+    else:
+        show_comments = False
+        
     if not os.path.exists(file_path):
         while not os.path.exists(file_path):
             file_path = input(f"This file does not exists. Try again:\n>").replace('"', "")
