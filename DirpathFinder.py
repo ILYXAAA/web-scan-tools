@@ -381,11 +381,11 @@ class DirPathFinder:
             progress_output_file = f"Progress/{self.your_site}_{self.paths_dictionary.replace('Dictionary/', '').replace('.txt', '')}.pickle"
             self.save_progress(progress_output_file, self.current_iteration, self.available_sites, self.total_errors_count, self.total_found)
             self.keep_highest_percentage_files()
-        # except Exception as error:
-        #     print(f"\n{Colors.RED}[LOG] <<Thread Error>>{Colors.END} - Error occured: {error}...")
-        #     print(error)
-        #     with open("last_launch.log", "a") as file:
-        #         file.write(f"\n[LOG] <<Thread Error>> - Error occured: {error}...")
+        except Exception as error:
+            print(f"\n{Colors.RED}[LOG] <<Thread Error>>{Colors.END} - Error occured: {error}...")
+            print(error)
+            with open("last_launch.log", "a") as file:
+                file.write(f"\n[LOG] <<Thread Error>> - Error occured: {error}...")
 
     def launch_threadings(self, paths_prefixs, threads_number):
         results = []
