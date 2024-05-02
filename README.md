@@ -63,6 +63,8 @@ user:~$ python DirPathFinder.py -u google.com
 
 `-t, --threads_number` - Максимальное количество потоков программы, **по умолчанию: `10`**
 
+`-up, --use_proxy` - Использовать прокси, в случае блокировки со стороны сервера, **по умолчанию: `False`**
+
 `-ep, --exclude_phrase` - Фраза для исключения успешных запросов из результатов. Пример: сайт выдает код ответа `[200]`, но по факту возвращает HTML-страницу с текстом "Такой страницы не существует". Соответственно, в `exclude_phrase` можно вписать фразу "Такой страницы не существует", чтобы скрипт относил такие страницы, как к невалидным. Поиск фразы осуществляется в `response.content`, соответственно фраза может быть хоть html-кодом, хоть base64 картинкой. **По умолчанию: `None`**
 
 **Пример использования в Python:**
@@ -73,12 +75,13 @@ from DirPathFinder import DirPathFinder
 domain = "google.com"
 paths_dictionary = "Dictionary/dict_4600_dirs.txt"
 seconds_to_sleep = 300
+use_proxy = False
 max_errors_number = 30
 max_threads_number = 20
 exclude_phrase = "404"
 
 #Инициализация класса
-Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase)
+Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, use_proxy=use_proxy, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase)
 
 #Запуск сканера
 Finder.start_dir_scanner()
