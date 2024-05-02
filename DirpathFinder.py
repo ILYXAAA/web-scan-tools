@@ -16,7 +16,7 @@ import concurrent.futures
 import urllib.request
 
 class DirPathFinder:
-    def __init__(self, proxy_list_file="Dictionary/proxy_list.txt", your_site=None, paths_dictionary="Dictionary/dict_4600_dirs.txt", exclude_flag_phrase=None, seconds_parameter=30, max_errors_number=30, seconds_to_sleep=30, max_threads_number=10, use_proxy=False) -> None:
+    def __init__(self, proxy_list_file="Dictionary/proxy_list.txt", your_site=None, paths_dictionary="Dictionary/dict_4600_dirs.txt", exclude_flag_phrase=None, seconds_parameter=30, max_errors_number=30, seconds_to_sleep=30, max_threads_number=10, use_proxy=False, skip_errors_flag=True) -> None:
         # Создание директорий программы (если их нет)
         if not os.path.exists("Results"):
             os.mkdir("Results")
@@ -45,6 +45,8 @@ class DirPathFinder:
             while not self.your_site:
                 self.your_site = input(f"{Colors.YELLOW}[LOG] <<DATA REQUIRED>>{Colors.END} Enter domain:\n[INPUT] >")
 
+        self.skip_errors_flag = skip_errors_flag # Не перепроверять сайты, свалившиеся с ошибкой
+        
         self.current_iteration = None # Для progress pickle
         self.current_percentage = None # Для `красивого` названия TMP файлов
         self.current_total_iterations = None # Для `красивого` названия TMP файлов
@@ -179,6 +181,9 @@ class DirPathFinder:
                 time_difference = int(max(self.errors_dict.values()) - min(self.errors_dict.values()))
                 returnstring = f"{Colors.RED}[LOG] <<ERRORS>>{Colors.END} - Too many errors... ({self.max_errors_number} errors in {time_difference} seconds)"
                 self.errors_dict.clear()  # Очищаем словарь ошибок
+                if not self.skip_errors_flag:
+                    self.current_iteration = self.current_iteration - self.max_errors_number
+                    self.total_errors_count = self.total_errors_count - self.max_errors_number
                 return False, returnstring
             else:
                 return True, None
@@ -349,6 +354,7 @@ class DirPathFinder:
                     if tqdm_desc:
                         tqdm.write(tqdm_desc)
                     if not check_errors_result:
+                        self.pbar.n = self.current_iteration
                         if self.use_proxy:
                             tqdm.write(f"{Colors.BLUE}[LOG] <<INFO>>{Colors.END} - Valid proxy searcher starts")
                             self.find_valid_proxy("proxy_list.txt")
@@ -496,6 +502,8 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--threads_number', type=int, default=10, help='Максимальное количество потоков программы')
     parser.add_argument('-ep', '--exclude_phrase', type=str, default=None, help='Фраза для отнесения 200-запросов к недостпным')
     parser.add_argument('-up', '--use_proxy', type=str, default="False", help='Использовать прокси-список')
+    parser.add_argument('-se', '--skip_errors', type=str, default="False", help='Не перепроверять сайты, свалившиеся с ошибкой')
+    
     args = parser.parse_args()
 
     paths_dictionary = args.dictionary_path
@@ -505,6 +513,11 @@ if __name__ == "__main__":
     max_threads_number = args.threads_number
     exclude_phrase = args.exclude_phrase
     use_proxy = args.use_proxy
+    skip_errors_flag = args.skip_errors
+    if "y" in skip_errors_flag.lower() or "true" in skip_errors_flag.lower():
+        skip_errors_flag = True
+    else:
+        skip_errors_flag = False
     if "true" in use_proxy.lower() or "y" in use_proxy.lower():
         use_proxy = True
     else:
@@ -521,5 +534,5 @@ if __name__ == "__main__":
         time.sleep(0.05)
         paths_dictionary = "Dictionary/dict_13k_dirs.txt"
 
-    Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase, use_proxy=use_proxy)
+    Finder = DirPathFinder(your_site=domain, paths_dictionary=paths_dictionary, seconds_to_sleep=sleep_seconds, max_errors_number=max_errors_number, max_threads_number=max_threads_number, exclude_flag_phrase=exclude_phrase, use_proxy=use_proxy, skip_errors_flag=skip_errors_flag)
     Finder.start_dir_scanner()
